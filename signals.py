@@ -7,36 +7,81 @@ from performance_charts import create_performance_chart
 
 TICKERS = [
     "NIFTYBEES.NS", "JUNIORBEES.NS", "MID150BEES.NS",
-    "BANKBEES.NS", "GOLDBEES.NS", "SILVERBEES.NS"
+    "BANKBEES.NS", "ICICINXT50.NS", "MON100.NS",
+    "MAFANG.NS", "HNGSNGBEES.NS", "ICICITECH.NS",
+    "GOLDBEES.NS", "SILVERBEES.NS", "ICICIPHARM.NS",
+    "MOM100.NS", "N100.NS", "KOTAKNV20.NS"
 ]
 
-def evaluate_signal(rsi, ma50, ma200, price):
-    """Return signal, confidence %, and trend label."""
-    score, total = 0, 4
-    if rsi < 40: score += 2
-    elif rsi < 50: score += 1
-    if ma50 > ma200: score += 1
-    if price > ma50 * 1.01: score += 1
+def evaluate_signal(rsi, ma50, ma200, price, zscore):
+    """
+    Evaluate ETF Buy/Wait signal using multiple weighted indicators:
+    RSI (momentum), Moving Averages (trend), Price position, and Z-Score (valuation).
+    """
 
-    confidence = int((score / total) * 100)
+    score = 0
 
-    if price > ma50 and ma50 > ma200:
+    # --- RSI-based momentum ---
+    # Lower RSI (<40) → oversold → potential rebound
+    # Very high RSI (>70) → overbought → caution
+    if rsi < 40:
+        score += 2
+    elif 40 <= rsi < 50:
+        score += 1
+    elif rsi > 70:
+        score -= 1
+
+    # --- Trend-based logic (MA crossovers) ---
+    # Short-term trend > long-term → bullish
+    if ma50 > ma200:
+        score += 1
+    else:
+        score -= 1
+
+    # --- Price vs MA50 confirmation ---
+    # If price above MA50 → strength confirmation
+    if price > ma50:
+        score += 1
+    else:
+        score -= 1
+
+    # --- Z-Score (valuation bias) ---
+    # Z-score < -2 → deeply undervalued (strong buy)
+    # Z-score > 2 → overbought
+    if zscore < -2:
+        score += 2
+    elif -2 <= zscore < -1:
+        score += 1
+    elif zscore > 2:
+        score -= 2
+    elif 1 < zscore <= 2:
+        score -= 1
+
+    # --- Confidence scaling ---
+    confidence = int((abs(score) / 6) * 100)
+    confidence = min(confidence, 100)
+
+    # --- Trend Label ---
+    if price > ma50 > ma200:
         trend = "📈 Up"
     elif price < ma200 and ma50 < ma200:
         trend = "📉 Down"
     else:
         trend = "➡️ Side"
 
-    if score >= 3:
+    # --- Final Signal ---
+    if score >= 4:
         signal = "STRONG BUY"
-    elif score == 2:
+    elif 2 <= score < 4:
         signal = "BUY"
-    elif score == 1:
+    elif -1 <= score < 2:
         signal = "WAIT"
-    else:
+    elif -3 <= score < -1:
         signal = "STRONG WAIT"
+    else:
+        signal = "AVOID"
 
-    return signal, confidence, trend
+    return signal, confidence, trend, score
 
 
 def run_once():
@@ -63,7 +108,7 @@ def run_once():
             price = float(last["Close"])
             zscore = float(last.get("ZScore", 0))
 
-            signal, confidence, trend = evaluate_signal(rsi, ma50, ma200, price)
+            signal, confidence, trend, score = evaluate_signal(rsi, ma50, ma200, price,zscore)
             trend_up = "Up" in trend
 
             # Sparkline (last 30 days)
@@ -72,8 +117,7 @@ def run_once():
             chart_path = create_performance_chart(df.tail(250), t)
 
             results.append({
-                "ETF": t,
-                "Trend": trend,
+                "Ticker": t,
                 "Sparkline": f"<img src='{spark_path}' width='80' height='25'>",
                 "Chart": f"<img src='{chart_path}' width='200' height='100'>",
                 "Close": round(price, 2),
@@ -82,7 +126,8 @@ def run_once():
                 "200DMA": round(ma200, 2),
                 "ZScore": round(zscore, 2),
                 "Signal": signal,
-                "Confidence": f"{confidence}%"
+                "Score": score,
+                "Confidence": f"{confidence}%",
             })
 
             print(f"{signal:>12} {trend:>8} → {t}: ₹{price:.2f} | RSI={rsi:.2f} | Conf={confidence}%")
@@ -94,7 +139,26 @@ def run_once():
         print("⚠️ No ETFs processed successfully.")
         return
 
-    out = pd.DataFrame(results).sort_values(by="ZScore", ascending=True)
+    # Convert results → DataFrame
+    out = pd.DataFrame(results)
+
+    # Ensure 'Score' column exists even if missing for some
+    if "Score" not in out.columns:
+        out["Score"] = 0
+    if "Signal" not in out.columns:
+        out["Signal"] = "WAIT"
+
+    # Sorting by signal and score
+    signal_order = {"STRONG BUY": 1, "BUY": 2, "WAIT": 3, "STRONG WAIT": 4, "AVOID": 5}
+    out["SignalRank"] = out["Signal"].map(signal_order).fillna(99)
+    out = out.sort_values(by=["SignalRank", "Score"], ascending=[True, False]).reset_index(drop=True)
+    out = out.drop(columns=["SignalRank"])
+
+    # Print summary
+    print("\n📊 ETF Summary by Signal:")
+    print(out["Signal"].value_counts().to_string())
+
+    # Pass results to output writer
     html_file = write_outputs(out)
 
     # ✅ Auto-open the HTML dashboard

@@ -31,7 +31,7 @@ def write_outputs(df):
     html_df = df.copy()
     html_df["Signal"] = html_df["Signal"].apply(lambda s: f"<b style='color:white;background:{color_for_signal(s)};padding:4px 8px;border-radius:4px;'>{s}</b>")
     html_df["Confidence"] = html_df["Confidence"].apply(confidence_bar)
-    cols = ["ETF", "Trend", "Sparkline", "Chart", "Close", "RSI", "50DMA", "200DMA", "ZScore", "Signal", "Confidence"]
+    cols = ["Ticker", "Sparkline", "Chart", "Close", "RSI", "50DMA", "200DMA", "ZScore", "Signal", "Score","Confidence"]
     html_df = html_df[cols]
 
     styled_html = f"""
