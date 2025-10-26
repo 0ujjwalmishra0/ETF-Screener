@@ -3,6 +3,7 @@ from data_fetch import fetch_etf_data
 from indicators import compute_basic_indicators
 from output_writer import write_outputs
 from sparkline_generator import create_sparkline
+from performance_charts import create_performance_chart
 
 TICKERS = [
     "NIFTYBEES.NS", "JUNIORBEES.NS", "MID150BEES.NS",
@@ -67,11 +68,14 @@ def run_once():
 
             # Sparkline (last 30 days)
             spark_path = create_sparkline(df["Close"].tail(30).tolist(), t.replace(".NS", ""), trend_up)
+            # Full-year performance chart
+            chart_path = create_performance_chart(df.tail(250), t)
 
             results.append({
                 "ETF": t,
                 "Trend": trend,
                 "Sparkline": f"<img src='{spark_path}' width='80' height='25'>",
+                "Chart": f"<img src='{chart_path}' width='200' height='100'>",
                 "Close": round(price, 2),
                 "RSI": round(rsi, 2),
                 "50DMA": round(ma50, 2),
