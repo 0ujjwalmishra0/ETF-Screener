@@ -4,6 +4,8 @@ from indicators import compute_basic_indicators
 from output_writer import write_outputs
 from sparkline_generator import create_sparkline
 from performance_charts import create_performance_chart
+from strategies.simple_rule_strategy import SimpleRuleStrategy
+from strategies.weighted_strategy import WeightedStrategy
 
 TICKERS = [
     "NIFTYBEES.NS", "JUNIORBEES.NS", "MID150BEES.NS",
@@ -13,78 +15,12 @@ TICKERS = [
     "MOM100.NS", "N100.NS", "KOTAKNV20.NS"
 ]
 
-def evaluate_signal(rsi, ma50, ma200, price, zscore):
-    """
-    Evaluate ETF Buy/Wait signal using multiple weighted indicators:
-    RSI (momentum), Moving Averages (trend), Price position, and Z-Score (valuation).
-    """
-
-    score = 0
-
-    # --- RSI-based momentum ---
-    # Lower RSI (<40) → oversold → potential rebound
-    # Very high RSI (>70) → overbought → caution
-    if rsi < 40:
-        score += 2
-    elif 40 <= rsi < 50:
-        score += 1
-    elif rsi > 70:
-        score -= 1
-
-    # --- Trend-based logic (MA crossovers) ---
-    # Short-term trend > long-term → bullish
-    if ma50 > ma200:
-        score += 1
-    else:
-        score -= 1
-
-    # --- Price vs MA50 confirmation ---
-    # If price above MA50 → strength confirmation
-    if price > ma50:
-        score += 1
-    else:
-        score -= 1
-
-    # --- Z-Score (valuation bias) ---
-    # Z-score < -2 → deeply undervalued (strong buy)
-    # Z-score > 2 → overbought
-    if zscore < -2:
-        score += 2
-    elif -2 <= zscore < -1:
-        score += 1
-    elif zscore > 2:
-        score -= 2
-    elif 1 < zscore <= 2:
-        score -= 1
-
-    # --- Confidence scaling ---
-    confidence = int((abs(score) / 6) * 100)
-    confidence = min(confidence, 100)
-
-    # --- Trend Label ---
-    if price > ma50 > ma200:
-        trend = "📈 Up"
-    elif price < ma200 and ma50 < ma200:
-        trend = "📉 Down"
-    else:
-        trend = "➡️ Side"
-
-    # --- Final Signal ---
-    if score >= 4:
-        signal = "STRONG BUY"
-    elif 2 <= score < 4:
-        signal = "BUY"
-    elif -1 <= score < 2:
-        signal = "WAIT"
-    elif -3 <= score < -1:
-        signal = "STRONG WAIT"
-    else:
-        signal = "AVOID"
-
-    return signal, confidence, trend, score
 
 
-def run_once():
+def run_once(strategy=None):
+    strategy = strategy or WeightedStrategy()  # default
+    results = []
+    print(f"\n🚀 Running ETF Screener Pro 2026 using {strategy.__class__.__name__}...\n")
     results = []
 
     for t in TICKERS:
@@ -108,7 +44,8 @@ def run_once():
             price = float(last["Close"])
             zscore = float(last.get("ZScore", 0))
 
-            signal, confidence, trend, score = evaluate_signal(rsi, ma50, ma200, price,zscore)
+            # ✅ Strategy-based signal evaluation
+            signal, confidence, trend, score = strategy.evaluate(df)
             trend_up = "Up" in trend
 
             # Sparkline (last 30 days)
