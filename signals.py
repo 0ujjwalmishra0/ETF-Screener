@@ -7,12 +7,30 @@ from performance_charts import create_performance_chart
 from strategies.simple_rule_strategy import SimpleRuleStrategy
 from strategies.weighted_strategy import WeightedStrategy
 
-TICKERS = [
-    "NIFTYBEES.NS", "JUNIORBEES.NS", "MID150BEES.NS",
-    "BANKBEES.NS", "ICICINXT50.NS", "MON100.NS",
-    "MAFANG.NS", "HNGSNGBEES.NS", "ICICITECH.NS",
-    "GOLDBEES.NS", "SILVERBEES.NS", "ICICIPHARM.NS",
-    "MOM100.NS", "N100.NS", "KOTAKNV20.NS"
+TICKERS= [
+    'NIFTYBEES.NS',
+    'BANKBEES.NS',
+    'JUNIORBEES.NS',
+    'GOLDBEES.NS',
+    'SETFNIF50.NS',
+    'MOM50.NS',
+    'NIFTYIETF.NS',
+    'SETFNIFBK.NS',
+    'SETFNN50.NS',
+    'ITBEES.NS',
+    'INFRABEES.NS',
+    'SHARIABEES.NS',
+    'SMALLCAP.NS',
+    'MIDCAPETF.NS',
+    '0P0001IUFY.BO',
+    'MONQ50.NS',
+    'MAHKTECH.NS',
+    'MON100.NS',
+    'MAFANG.NS',
+    'MASPTOP50.NS',
+    'MODEFENCE.NS',
+    'CPSEETF.NS',
+    'PSUBANK.NS'
 ]
 
 
@@ -94,11 +112,4 @@ def run_once(strategy=None):
     # Print summary
     print("\n📊 ETF Summary by Signal:")
     print(out["Signal"].value_counts().to_string())
-
-    # Pass results to output writer
-    html_file = write_outputs(out)
-
-    # ✅ Auto-open the HTML dashboard
-    webbrowser.open(html_file)
-
-    print("\n✅ Screener complete. Dashboard auto-opened in browser.")
+    write_outputs(out)
