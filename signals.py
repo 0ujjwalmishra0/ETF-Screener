@@ -1,7 +1,7 @@
 import pandas as pd, webbrowser
 from data_fetch import fetch_etf_data
 from indicators import compute_basic_indicators
-from output_writer import write_outputs
+from output_writer import generate_dashboard_html
 from sparkline_generator import create_sparkline
 from performance_charts import create_performance_chart
 from strategies.simple_rule_strategy import SimpleRuleStrategy
@@ -112,4 +112,5 @@ def run_once(strategy=None):
     # Print summary
     print("\n📊 ETF Summary by Signal:")
     print(out["Signal"].value_counts().to_string())
-    write_outputs(out)
+    generate_dashboard_html(out)
+    return out
