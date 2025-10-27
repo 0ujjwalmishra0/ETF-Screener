@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ETF Portfolio Tracker</title>
+    <style>
+        body {
+            font-family: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #f7f9fc;
+            margin: 30px;
+            color: #333;
+        }
+        .card {
+            background: white;
+            border-radius: 14px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+            padding: 25px;
+        }
+        h1 {
+            color: #1f77b4;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+        h1::before {
+            content: '📊';
+            font-size: 28px;
+        }
+        .last-updated {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 25px;
+        }
+        .summary {
+            display: flex;
+            gap: 25px;
+            flex-wrap: wrap;
+            margin-bottom: 25px;
+        }
+        .summary-card {
+            background: #f8fbff;
+            border: 1px solid #dbe9ff;
+            border-radius: 10px;
+            padding: 15px 20px;
+            flex: 1;
+            min-width: 200px;
+            text-align: center;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.03);
+        }
+        .summary-card h3 {
+            margin: 0;
+            color: #1f77b4;
+            font-size: 15px;
+            margin-bottom: 6px;
+        }
+        .summary-card p {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            font-size: 14px;
+        }
+        th {
+            cursor: pointer;
+            color: white;
+            background-color: #0056b3; /* your original header blue */
+            position: relative;
+            padding: 10px;
+        }
+
+        th.sorted-asc::after,
+        th.sorted-desc::after {
+            position: absolute;
+            font-size: 12px;
+        }
+
+        th.sorted-asc::after {
+            content: "▲";
+            color: #4CAF50; /* green for ascending */
+        }
+
+        th.sorted-desc::after {
+            content: "▼";
+            color: #e74c3c; /* red for descending */
+        }
+
+        th.sorted-asc,
+        th.sorted-desc {
+            background-color: #0074d9; /* slightly lighter blue, not white */
+        }
+
+        td {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        tr:hover {
+            background: #f1f7ff;
+        }
+        .gain {
+            color: #00a65a;
+            font-weight: 600;
+        }
+        .loss {
+            color: #e74c3c;
+            font-weight: 600;
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+            z-index: 10;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 260px;
+            background-color: #333;
+            color: #fff;
+            text-align: left;
+            border-radius: 8px;
+            padding: 10px;
+            position: absolute;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 12px;
+            line-height: 1.4;
+            white-space: normal;
+            z-index: 9999;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+
+
+        /* Tooltip wrapper & box */
+        .tooltip-wrapper {
+            position: relative;
+            display: inline-block;
+            z-index: 99999;
+        }
+
+        .tooltip-box {
+            visibility: hidden;
+            opacity: 0;
+            width: 300px;
+            max-width: 48vw;
+            background: rgba(0,0,0,0.9);
+            color: #fff;
+            padding: 10px 12px;
+            border-radius: 8px;
+            position: absolute;
+            bottom: 130%;
+            left: 50%;
+            transform: translateX(-50%) translateY(6px);
+            transition: opacity 0.24s ease, transform 0.24s ease;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+            white-space: normal;
+            line-height: 1.35;
+            z-index: 999999;
+        }
+
+        /* arrow */
+        .tooltip-box::after{
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -6px;
+            border-width: 6px;
+            border-style: solid;
+            border-color: rgba(0,0,0,0.9) transparent transparent transparent;
+        }
+
+        .tooltip-wrapper:hover .tooltip-box {
+            visibility: visible;
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* badge styles */
+        .signal-buy { background: #00b894; color: #fff; padding:6px 10px; border-radius:8px; font-weight:700; }
+        .signal-wait { background: #f59e0b; color: #000; padding:6px 10px; border-radius:8px; font-weight:700; }
+        .signal-avoid { background: #ef4444; color: #fff; padding:6px 10px; border-radius:8px; font-weight:700; }
+
+        /* PnL colors */
+        .gain { color: #00a65a; font-weight:700; }
+        .loss { color: #e74c3c; font-weight:700; }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 13px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>ETF Portfolio Tracker</h1>
+    <div class="last-updated"><b>Last Updated:</b> {{last_updated}}</div>
+
+    <div class="summary">
+        <div class="summary-card">
+            <h3>💰 Total Portfolio Value</h3>
+            <p>₹{{total_value}}</p>
+        </div>
+        <div class="summary-card">
+            <h3>📈 Total PnL%</h3>
+            <p style="color: {{pnl_color}};">{{total_pnl}}%</p>
+        </div>
+        <div class="summary-card">
+            <h3>🟢 Accumulate / Hold</h3>
+            <p>{{buy_hold_count}}</p>
+        </div>
+        <div class="summary-card">
+            <h3>🔴 Exit / Cut Loss</h3>
+            <p>{{exit_count}}</p>
+        </div>
+    </div>
+
+    {{table_html}}
+
+    <div class="footer">© 2025 ETF Screener Pro — Powered by yFinance</div>
+</div>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const table = document.querySelector("table.table");
+        const headers = table.querySelectorAll("th");
+        let sortOrder = {};
+
+        headers.forEach((header, index) => {
+            header.addEventListener("click", () => {
+                const rows = Array.from(table.querySelectorAll("tbody tr"));
+                const isNumeric = (val) => !isNaN(parseFloat(val.replace(/[₹,%]/g, "")));
+                const direction = sortOrder[index] === "asc" ? "desc" : "asc";
+                sortOrder[index] = direction;
+
+                rows.sort((a, b) => {
+                    let aText = a.children[index].innerText.trim();
+                    let bText = b.children[index].innerText.trim();
+                    if (isNumeric(aText) && isNumeric(bText)) {
+                        aText = parseFloat(aText.replace(/[₹,%]/g, ""));
+                        bText = parseFloat(bText.replace(/[₹,%]/g, ""));
+                    }
+                    if (aText < bText) return direction === "asc" ? -1 : 1;
+                    if (aText > bText) return direction === "asc" ? 1 : -1;
+                    return 0;
+                });
+
+                const tbody = table.querySelector("tbody");
+                tbody.innerHTML = "";
+                rows.forEach(row => tbody.appendChild(row));
+
+                headers.forEach(h => h.classList.remove("sorted-asc", "sorted-desc"));
+                header.classList.add(direction === "asc" ? "sorted-asc" : "sorted-desc");
+            });
+        });
+    });
+</script>
+
+
+</body>
+</html>
