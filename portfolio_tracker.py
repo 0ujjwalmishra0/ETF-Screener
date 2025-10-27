@@ -19,9 +19,13 @@ class PortfolioTracker:
         if not os.path.exists(PORTFOLIO_FILE):
             print(f"⚠️ No portfolio file found at {PORTFOLIO_FILE}. Creating empty portfolio.")
             df = pd.DataFrame(columns=["Ticker", "Quantity", "BuyPrice", "BuyDate"])
+            df.rename(columns=lambda x: x.strip().title().replace(" ", ""), inplace=True)
             df.to_csv(PORTFOLIO_FILE, index=False)
             return df
-        return pd.read_csv(PORTFOLIO_FILE)
+        file= pd.read_csv(PORTFOLIO_FILE)
+        print(file.head())
+        print(file.columns)
+        return file
 
     def evaluate_positions(self):
         """Fetch latest ETF data, compute indicators, evaluate signals, and update portfolio."""
@@ -41,10 +45,12 @@ class PortfolioTracker:
             buy_date = row.get("BuyDate", "N/A")
 
             try:
-                df = fetch_etf_data(ticker, period="6mo", interval="1d")
+                df = fetch_etf_data(ticker, period="1y", interval="1d")
                 if df.empty or "Close" not in df.columns:
                     print(f"⚠️ Skipping {ticker}: no data.")
                     continue
+
+                print(f"Fetched {ticker}: {len(df)} rows, cols={df.columns.tolist()}")
 
                 df = compute_basic_indicators(df)
                 if df.empty:
@@ -110,45 +116,230 @@ class PortfolioTracker:
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         html_path = os.path.join(OUTPUT_DIR, "portfolio_dashboard.html")
 
+        # --- Portfolio Summary ---
+        df["CurrentValue"] = df["Qty"] * df["CurrentPrice"]
+        total_value = df["CurrentValue"].sum()
+        total_invested = (df["Qty"] * df["BuyPrice"]).sum()
+        total_pnl = ((total_value - total_invested) / total_invested) * 100
+
+        # Use mutually exclusive buckets
+        accumulate_or_hold = df["SuggestedAction"].str.contains("Accumulate|Hold", case=False, na=False)
+        exit_or_cut = df["SuggestedAction"].str.contains("Exit|Cut", case=False, na=False)
+
+        buy_hold_count = accumulate_or_hold.sum()
+        exit_count = exit_or_cut.sum()
+
         html_content = f"""
         <html>
         <head>
             <title>ETF Portfolio Tracker</title>
+            <meta charset="UTF-8">
             <style>
                 body {{
-                    font-family: Arial, sans-serif;
-                    background: #f5f7fa;
+                    font-family: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
+                    background: #f4f6f9;
                     margin: 40px;
+                    color: #333;
+                }}
+                .card {{
+                    background: white;
+                    border-radius: 14px;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.06);
+                    padding: 28px;
                 }}
                 h1 {{
                     color: #1f77b4;
+                    font-weight: 700;
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    margin-bottom: 6px;
+                }}
+                h1::before {{
+                    content: '📊';
+                    font-size: 28px;
+                }}
+                .last-updated {{
+                    font-size: 14px;
+                    color: #666;
+                    margin-bottom: 22px;
+                }}
+                .summary {{
+                    display: flex;
+                    gap: 25px;
+                    flex-wrap: wrap;
+                    margin-bottom: 25px;
+                }}
+                .summary-card {{
+                    background: #f8fbff;
+                    border: 1px solid #dbe9ff;
+                    border-radius: 10px;
+                    padding: 15px 20px;
+                    flex: 1;
+                    min-width: 200px;
+                    text-align: center;
+                    box-shadow: 0 3px 8px rgba(0,0,0,0.03);
+                }}
+                .summary-card h3 {{
+                    margin: 0;
+                    color: #1f77b4;
+                    font-size: 15px;
+                    margin-bottom: 6px;
+                }}
+                .summary-card p {{
+                    margin: 0;
+                    font-size: 18px;
+                    font-weight: 700;
                 }}
                 table {{
                     border-collapse: collapse;
                     width: 100%;
                     background: white;
-                }}
-                th, td {{
-                    border: 1px solid #ccc;
-                    padding: 8px;
-                    text-align: center;
+                    border-radius: 10px;
+                    overflow: hidden;
+                    font-size: 14px;
                 }}
                 th {{
                     background: #1f77b4;
                     color: white;
+                    text-transform: uppercase;
+                    font-size: 12.5px;
+                    letter-spacing: 0.4px;
+                    padding: 10px;
                 }}
-                tr:nth-child(even) {{
-                    background: #f9f9f9;
+                td {{
+                    padding: 10px;
+                    text-align: center;
+                    border-bottom: 1px solid #eee;
+                    vertical-align: middle;
+                    white-space: nowrap;
+                }}
+                tr:hover {{
+                    background: #f1f7ff;
+                }}
+                .gain {{
+                    color: #00a65a;
+                    font-weight: 600;
+                }}
+                .loss {{
+                    color: #e74c3c;
+                    font-weight: 600;
+                }}
+                .bar {{
+                    display: inline-block;
+                    height: 6px;
+                    border-radius: 4px;
+                    margin-left: 6px;
+                }}
+                .signal-buy {{
+                    background: #e8f5e9;
+                    color: #2e7d32;
+                    padding: 4px 10px;
+                    border-radius: 6px;
+                    font-weight: 600;
+                }}
+                .signal-wait {{
+                    background: #fff3e0;
+                    color: #ef6c00;
+                    padding: 4px 10px;
+                    border-radius: 6px;
+                    font-weight: 600;
+                }}
+                .signal-avoid {{
+                    background: #ffebee;
+                    color: #c62828;
+                    padding: 4px 10px;
+                    border-radius: 6px;
+                    font-weight: 600;
+                }}
+                .trend-up {{
+                    color: #00a65a;
+                    font-weight: 600;
+                }}
+                .trend-down {{
+                    color: #e74c3c;
+                    font-weight: 600;
+                }}
+                .footer {{
+                    text-align: center;
+                    margin-top: 30px;
+                    font-size: 13px;
+                    color: #999;
+                }}
+                @media (max-width: 768px) {{
+                    body {{ margin: 10px; }}
+                    table, th, td {{ font-size: 12px; }}
+                    .summary {{ flex-direction: column; }}
                 }}
             </style>
         </head>
         <body>
-            <h1>📊 ETF Portfolio Tracker</h1>
-            <p><b>Last Updated:</b> {now}</p>
-            {df.to_html(index=False, escape=False)}
+            <div class="card">
+                <h1>ETF Portfolio Tracker</h1>
+                <div class="last-updated"><b>Last Updated:</b> {now}</div>
+        
+                <div class="summary">
+                    <div class="summary-card">
+                        <h3>💰 Total Portfolio Value</h3>
+                        <p>₹{total_value:,.2f}</p>
+                    </div>
+                    <div class="summary-card">
+                        <h3>📈 Total PnL%</h3>
+                        <p style="color:{'#00a65a' if total_pnl>=0 else '#e74c3c'};">{total_pnl:.2f}%</p>
+                    </div>
+                    <div class="summary-card">
+                        <h3>🟢 Accumulate / Hold</h3>
+                        <p>{buy_hold_count}</p>
+                    </div>
+                    <div class="summary-card">
+                        <h3>🔴 Exit / Cut Loss</h3>
+                        <p>{exit_count}</p>
+                    </div>
+                </div>
+        
+                <table>
+                    <thead>
+                        <tr>
+                            {"".join(f"<th>{col}</th>" for col in df.columns)}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {"".join(
+                    "<tr>" +
+                    "".join(
+                        f"<td class='"
+                        + (
+                            "gain" if col=="PnL%" and val>0 else
+                            "loss" if col=="PnL%" and val<0 else
+                            ""
+                        ) + "'>"
+                        + (
+                            # --- Signal badge ---
+                            f"<span class='signal-buy'>{val}</span>" if col=="Signal" and "BUY" in str(val) else
+                            f"<span class='signal-wait'>{val}</span>" if col=="Signal" and "WAIT" in str(val) else
+                            f"<span class='signal-avoid'>{val}</span>" if col=="Signal" and "AVOID" in str(val) else
+                            # --- PnL% bar ---
+                            (f"{val:.2f}% <span class='bar' style='width:{min(abs(val)*2,100)}px;background:{'#00a65a' if val>0 else '#e74c3c'}'></span>" if col=="PnL%" else
+                             # --- Trend emoji ---
+                             f"<span class='trend-up'>📈 Up</span>" if col=="Trend" and 'Up' in str(val) else
+                             f"<span class='trend-down'>📉 Down</span>" if col=="Trend" and 'Down' in str(val) else
+                             str(val))
+                        )
+                        + "</td>"
+                        for col, val in zip(df.columns, row)
+                    ) +
+                    "</tr>"
+                    for _, row in df.iterrows()
+                )}
+                    </tbody>
+                </table>
+        
+                <div class="footer">© 2025 ETF Screener Pro — Powered by yFinance</div>
+            </div>
         </body>
         </html>
         """
+
 
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(html_content)
@@ -179,6 +370,8 @@ def add_to_portfolio(ticker, quantity, buy_price, buy_date=None):
 
         try:
             existing = pd.read_csv(PORTFOLIO_FILE)
+            print(existing.head())
+            print(existing.columns)
         except FileNotFoundError:
             existing = pd.DataFrame(columns=["Ticker", "Quantity", "BuyPrice", "BuyDate"])
 

@@ -60,13 +60,12 @@ def write_outputs(df):
       <div class="header">ETF Screener Pro 2026 Dashboard</div>
       <div class="timestamp">Last Updated: {last_updated}</div>
       <div style="margin-top:20px;">
-        <a href="portfolio_dashboard.html" target="_blank"
+        <a href="dashboards/portfolio_dashboard.html" target="_blank"
             style="background:#007bff; color:white; padding:10px 20px; border-radius:8px; text-decoration:none;">
             📈 View Portfolio Tracker
         </a>
       </div>
       <table>
-        <caption>Sorted by Z-Score</caption>
         {html_df.to_html(index=False, escape=False)}
       </table>
     </body>
@@ -78,6 +77,5 @@ def write_outputs(df):
     print(f"✅ Excel & HTML dashboard generated:\n  📊 {excel_path}\n  🌐 {html_path}")
     print(f"path to open : {str(html_path.resolve())}")
     # Auto-open in browser
-    webbrowser.open_new_tab(str(html_path.resolve()))
-
+    webbrowser.open_new_tab(f"file://{str(html_path.resolve())}")
     return str(html_path)
