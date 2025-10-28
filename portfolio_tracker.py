@@ -16,79 +16,116 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 class PortfolioTracker:
     def __init__(self, strategy="weighted"):
         self.strategy = WeightedStrategy() if strategy.lower() == "weighted" else SimpleRuleStrategy()
+        self.data = {}  # store {ticker: processed dataframe} for reuse
 
     def load_portfolio(self):
-        """Load portfolio from CSV (Ticker, Quantity, BuyPrice, BuyDate)."""
+        """Load and sanitize portfolio from CSV (Ticker, Quantity, Buyprice, Buydate)."""
         if not os.path.exists(PORTFOLIO_FILE):
             print(f"⚠️ No portfolio file found at {PORTFOLIO_FILE}. Creating empty portfolio.")
-            df = pd.DataFrame(columns=["Ticker", "Quantity", "BuyPrice", "BuyDate"])
-            df.rename(columns=lambda x: x.strip().title().replace(" ", ""), inplace=True)
+            df = pd.DataFrame(columns=["Ticker", "Quantity", "Buyprice", "Buydate"])
             df.to_csv(PORTFOLIO_FILE, index=False)
+            print(f"df after load is {df}")
             return df
-        file= pd.read_csv(PORTFOLIO_FILE)
-        print(file.head())
-        print(file.columns)
-        return file
+
+        df = pd.read_csv(PORTFOLIO_FILE)
+
+        # --- Normalize column names ---
+        df.columns = (
+            df.columns.str.strip()
+            .str.replace(" ", "", regex=False)
+            .str.replace("_", "", regex=False)
+            .str.title()
+        )
+
+        # --- Ensure all required columns exist ---
+        for col in ["Ticker", "Quantity", "Buyprice", "Buydate"]:
+            if col not in df.columns:
+                df[col] = None
+
+        print("✅ Loaded portfolio:")
+        print(df.head())
+        print("Columns:", df.columns.tolist())
+        return df
+
 
     def evaluate_positions(self):
-        """Fetch latest ETF data, compute indicators, evaluate signals, and update portfolio."""
-        portfolio = self.load_portfolio()
+        """Fetch data, compute indicators, evaluate strategy, and generate advisory insights."""
+        portfolio_df = self.load_portfolio()
         results = []
-
-        if portfolio.empty:
-            print("⚠️ Portfolio is empty. Add holdings to portfolio.csv")
+        advisor = AdvisorEngine()
+        if portfolio_df.empty:
+            print("⚠️ Portfolio file is empty. Nothing to evaluate.")
             return pd.DataFrame()
 
-        print("📈 Evaluating portfolio...")
-
-        for _, row in portfolio.iterrows():
+        for _, row in portfolio_df.iterrows():
             ticker = row["Ticker"]
             qty = row["Quantity"]
-            buy_price = row["BuyPrice"]
-            buy_date = row.get("BuyDate", "N/A")
+            buy_price = row["Buyprice"]
+
+            buy_date = row.get("Buydate", "")
+
+            # --- Fetch ETF data ---
+            df = fetch_etf_data(ticker, period="1y", interval="1d")
+            if df.empty or "Close" not in df.columns:
+                print(f"⚠️ Skipping {ticker}: no data fetched.")
+                continue
+
+            # --- Compute Indicators ---
+            df = compute_basic_indicators(df)
+            if df.empty:
+                print(f"⚠️ Skipping {ticker}: indicators unavailable.")
+                continue
+
+            # Store for possible later use
+            self.data[ticker] = df
 
             try:
-                df = fetch_etf_data(ticker, period="1y", interval="1d")
-                if df.empty or "Close" not in df.columns:
-                    print(f"⚠️ Skipping {ticker}: no data.")
-                    continue
-
-                print(f"Fetched {ticker}: {len(df)} rows, cols={df.columns.tolist()}")
-
-                df = compute_basic_indicators(df)
-                if df.empty:
-                    continue
-
-                # Strategy evaluation
+                # --- Evaluate Strategy ---
                 signal, confidence, trend, score = self.strategy.evaluate(df)
                 last_close = float(df.iloc[-1]["Close"])
                 pnl = ((last_close - buy_price) / buy_price) * 100
-                reason = AdvisorEngine().get_reason(signal, trend, pnl)
 
+                # --- Generate Full Advisory ---
+                # ticker, df, signal, confidence, trend, pnl, score
+                advice = advisor.generate_advice(
+                    ticker=ticker,
+                    df=df,
+                    signal=signal,
+                    confidence=confidence,
+                    trend=trend,
+                    pnl=pnl,
+                    score=score
+                )
+
+                # --- Collect results ---
                 results.append({
                     "Ticker": ticker,
                     "Qty": qty,
-                    "BuyPrice": round(buy_price, 2),
+                    "Buyprice": round(buy_price, 2),
                     "CurrentPrice": round(last_close, 2),
                     "PnL%": round(pnl, 2),
-                    "BuyDate": buy_date,
+                    "Buydate": buy_date,
                     "Signal": signal,
-                    "SignalReason": reason,
                     "Confidence": f"{confidence}%",
                     "Trend": trend,
-                    "Score": score,
+                    "Score": round(score, 2),
+                    "Reason": advice["Reason"],
+                    "Action": advice["Action"],
+                    "NextRange": advice["NextRange"],
+                    "PortfolioImpact": advice["PortfolioImpact"]
                 })
 
             except Exception as e:
                 print(f"❌ Error processing {ticker}: {e}")
+                continue
 
         if not results:
-            print("⚠️ No valid ETF data for portfolio.")
+            print("⚠️ No valid portfolio data found.")
             return pd.DataFrame()
 
         df = pd.DataFrame(results)
 
-        # --- Determine Suggested Action ---
+        # --- Suggested Action Helper ---
         def get_suggested_action(row):
             if row["Signal"] in ["STRONG BUY", "BUY"]:
                 return "Hold / Accumulate"
@@ -114,153 +151,172 @@ class PortfolioTracker:
 
 
     def generate_dashboard(self, df):
-        """Generate portfolio dashboard (manually render table rows to avoid pandas html quirks)."""
-        import html  # for escaping
-        if df is None or df.empty:
+        """Generate portfolio dashboard using enhanced HTML template with tooltips."""
+        if df.empty:
             print("⚠️ Nothing to display in portfolio dashboard.")
             return None
 
-        template_path = os.path.join("dashboards", "portfolio_dashboard_template.html")
-        output_path = os.path.join("dashboards", "portfolio_dashboard.html")
+        # Ensure the dashboards directory exists
+        os.makedirs("dashboards", exist_ok=True)
+        html_path = os.path.join("dashboards", "portfolio_dashboard.html")
 
-        # read base template (which should contain placeholders as in earlier file)
-        with open(template_path, "r", encoding="utf-8") as f:
-            template = f.read()
-
-        now = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-        # --- Portfolio summary ---
+        # --- Portfolio Summary ---
         df["CurrentValue"] = df["Qty"] * df["CurrentPrice"]
         total_value = df["CurrentValue"].sum()
-        total_invested = (df["Qty"] * df["BuyPrice"]).sum()
-        total_pnl = ((total_value - total_invested) / total_invested) * 100 if total_invested != 0 else 0.0
+        total_invested = (df["Qty"] * df["Buyprice"]).sum()
+        total_pnl = ((total_value - total_invested) / total_invested) * 100
         pnl_color = "#00a65a" if total_pnl >= 0 else "#e74c3c"
 
-        accumulate_or_hold = df["SuggestedAction"].str.contains("Accumulate|Hold", case=False, na=False)
-        exit_or_cut = df["SuggestedAction"].str.contains("Exit|Cut", case=False, na=False)
-        buy_hold_count = int(accumulate_or_hold.sum())
-        exit_count = int(exit_or_cut.sum())
+        accumulate_or_hold = df["Action"].str.contains("Accumulate|Hold", case=False, na=False)
+        exit_or_cut = df["Action"].str.contains("Exit|Cut", case=False, na=False)
+        buy_hold_count = accumulate_or_hold.sum()
+        exit_count = exit_or_cut.sum()
 
-        # --- helper functions ---
-        def clean_text(x):
-            """Remove escaped/newline artifacts and trim; ensure string (no backslash-n left)."""
-            if x is None:
-                return ""
-            s = str(x)
-            s = s.replace("\\n", " ").replace("\n", " ").replace("\r", " ").strip()
-            # collapse multiple spaces
-            while "  " in s:
-                s = s.replace("  ", " ")
-            return s
+        # --- Prepare display columns ---
+        display_cols = [
+            "Ticker", "Qty", "Buyprice", "CurrentPrice", "PnL%",
+            "Signal", "Confidence", "Trend", "Score", "Action", "NextRange"
+        ]
 
-        def badge_class_for(signal_text):
-            s = (signal_text or "").upper()
-            if "BUY" in s:
-                return "signal-buy"
-            if "WAIT" in s or "HOLD" in s:
-                return "signal-wait"
-            if "SELL" in s or "AVOID" in s:
-                return "signal-avoid"
-            return "signal-wait"
+        df_display = df[display_cols].copy()
 
-        def html_escape(s):
-            """Escape text for insertion into HTML content (not attributes)."""
-            return html.escape(str(s), quote=False)
-
-        # --- Build table rows manually (controlled) ---
-        rows_html = []
-        for _, row in df.iterrows():
-            ticker = html_escape(clean_text(row.get("Ticker", "")))
-            qty = html_escape(clean_text(row.get("Qty", "")))
-            buy_price = row.get("BuyPrice", "")
-            current_price = row.get("CurrentPrice", "")
-            pnl_val = row.get("PnL%", 0.0)
-            buy_date = html_escape(clean_text(row.get("BuyDate", "")))
-
-            # New columns
-            action = html_escape(clean_text(row.get("SuggestedAction", "—")))
-            score = html_escape(clean_text(row.get("Score", "—")))
-            current_value = f"₹{float(row.get('CurrentValue', 0)):.2f}"
-
-            # Signal & reason
-            signal_raw = clean_text(row.get("Signal", ""))
-            # If your Signal column already contains HTML (from earlier), ensure we extract plain text:
-            # remove any HTML tags if present (simple approach)
-            # but we assume it's plain text; still sanitize
-            signal_text = html_escape(signal_raw)
-            reason_text = clean_text(row.get("SignalReason", ""))  # keep plain text
-            reason_text = html_escape(reason_text)
-            conf = html_escape(clean_text(row.get("Confidence", "")))
-
-            # choose badge class
-            badge_class = badge_class_for(signal_text)
-
-            pnl_color_cell = "gain" if float(pnl_val) > 0 else "loss" if float(pnl_val) < 0 else ""
-
-            # build the tooltip-wrapper and badge (tooltip text is reason_text)
-            # Use data-* attribute as well as inner tooltip div to be robust
-            signal_cell_html = (
-                f'<div class="tooltip-wrapper" data-reason="{reason_text}">'
-                f'  <span class="{badge_class}">{signal_text}</span>'
-                f'  <div class="tooltip-box" aria-hidden="true">{reason_text}</div>'
-                f'</div>'
-            )
-
-            row_html = (
-                "<tr>"
-                f"<td>{ticker}</td>"
-                f"<td>{qty}</td>"
-                f"<td>₹{buy_price:.2f}</td>"
-                f"<td>₹{current_price:.2f}</td>"
-                f"<td class='{pnl_color_cell}'>{pnl_val:.2f}%</td>"
-                f"<td style='white-space:nowrap'>{buy_date}</td>"
-                f"<td>{signal_cell_html}</td>"
-                f"<td>{conf}</td>"
-                f"<td>{action}</td>"
-                f"<td>{score}</td>"
-                f"<td>{current_value}</td>"
-                "</tr>"
-            )
-            rows_html.append(row_html)
-
-        table_rows_combined = "\n".join(rows_html)
-
-        # --- Inject rows into the template's tbody (replace {{table_html}} placeholder) ---
-        # Our template uses {{table_html}} placeholder - we will replace that with table markup.
-        # Build the full table markup here
-        # --- table markup ---
-        table_full_html = f"""
-        <table class="table">
-          <thead>
-            <tr>
-              <th>TICKER</th><th>QTY</th><th>BUYPRICE</th><th>CURRENTPRICE</th>
-              <th>PNL%</th><th>BUYDATE</th><th>SIGNAL</th>
-              <th>CONFIDENCE</th><th>ACTION</th><th>SCORE</th><th>CURRENT VALUE</th>
-            </tr>
-          </thead>
-          <tbody>
-            {table_rows_combined}
-          </tbody>
-        </table>
+        # --- Build table manually with tooltips ---
+        table_html = """
+        <table class="portfolio-table">
+            <thead>
+                <tr>
+                    """ + "".join([f"<th>{col}</th>" for col in display_cols]) + """
+                </tr>
+            </thead>
+            <tbody>
         """
 
-        rendered = (
-            template
-            .replace("{{last_updated}}", now)
-            .replace("{{total_value}}", f"{total_value:,.2f}")
-            .replace("{{total_pnl}}", f"{total_pnl:.2f}")
-            .replace("{{pnl_color}}", pnl_color)
-            .replace("{{buy_hold_count}}", str(buy_hold_count))
-            .replace("{{exit_count}}", str(exit_count))
-            .replace("{{table_html}}", table_full_html)
-        )
+        for _, row in df_display.iterrows():
+            tooltip = (
+                f"<b>{row['Ticker']}</b><br>"
+                f"<b>Signal:</b> {row['Signal']} ({row['Confidence']})<br>"
+                f"<b>Reason:</b> {df.loc[_]['Reason']}<br>"
+                f"<b>Action:</b> {df.loc[_]['Action']}<br>"
+                f"<b>Next 7D Range:</b> {df.loc[_]['NextRange']}<br>"
+                f"<b>Portfolio Impact:</b> {df.loc[_]['PortfolioImpact']}"
+            )
+            table_html += "<tr>"
+            for col in display_cols:
+                if col == "Signal":
+                    table_html += f"""
+                        <td>
+                            <div class="tooltip">{row[col]}
+                                <span class="tooltiptext">{tooltip}</span>
+                            </div>
+                        </td>
+                    """
+                else:
+                    table_html += f"<td>{row[col]}</td>"
+            table_html += "</tr>"
 
-        # --- Write final file ---
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(rendered)
+        table_html += "</tbody></table>"
 
-        print(f"💾 Portfolio dashboard saved: {output_path}")
-        return output_path
+        # --- HTML Structure ---
+        html_content = f"""
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>ETF Portfolio Dashboard</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', sans-serif;
+                    margin: 40px;
+                    background-color: #f8fafc;
+                    color: #222;
+                }}
+                h1 {{
+                    text-align: center;
+                    color: #1e3a8a;
+                }}
+                .summary {{
+                    text-align: center;
+                    margin-bottom: 25px;
+                    font-size: 1.2em;
+                }}
+                .portfolio-table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                }}
+                .portfolio-table th {{
+                    background-color: #2563eb;
+                    color: white;
+                    padding: 10px;
+                    text-align: left;
+                    font-size: 14px;
+                }}
+                .portfolio-table td {{
+                    padding: 10px;
+                    border-bottom: 1px solid #ddd;
+                    background: #fff;
+                    font-size: 14px;
+                    text-align: center;
+                }}
+                .portfolio-table tr:hover {{
+                    background-color: #f1f5f9;
+                }}
+                .tooltip {{
+                    position: relative;
+                    display: inline-block;
+                    cursor: help;
+                }}
+                .tooltip .tooltiptext {{
+                    visibility: hidden;
+                    width: 280px;
+                    background-color: #111827;
+                    color: #fff;
+                    text-align: left;
+                    border-radius: 6px;
+                    padding: 10px;
+                    position: absolute;
+                    z-index: 1;
+                    bottom: 125%;
+                    left: 50%;
+                    margin-left: -140px;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                    white-space: normal;
+                    line-height: 1.4;
+                    box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+                }}
+                .tooltip:hover .tooltiptext {{
+                    visibility: visible;
+                    opacity: 1;
+                }}
+                .footer {{
+                    text-align: center;
+                    margin-top: 20px;
+                    color: #555;
+                }}
+            </style>
+        </head>
+        <body>
+            <h1>ETF Portfolio Dashboard</h1>
+            <div class="summary">
+                <p><b>Total Value:</b> ₹{total_value:,.2f} |
+                   <b>Invested:</b> ₹{total_invested:,.2f} |
+                   <b>PnL:</b> <span style="color:{pnl_color};">{total_pnl:.2f}%</span></p>
+                <p>🟢 Accumulate / Hold: {buy_hold_count} &nbsp;&nbsp; 🔴 Exit / Cut: {exit_count}</p>
+            </div>
+            {table_html}
+            <div class="footer">
+                Last Updated: {datetime.now().strftime("%Y-%m-%d %H:%M")}
+            </div>
+        </body>
+        </html>
+        """
+
+        # --- Save HTML ---
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html_content)
+
+        print(f"💾 Portfolio dashboard saved: {html_path}")
+        return html_path
 
 
 def run_portfolio_tracker():
@@ -279,8 +335,8 @@ def add_to_portfolio(ticker, quantity, buy_price, buy_date=None):
         new_entry = pd.DataFrame([{
             "Ticker": ticker,
             "Quantity": quantity,
-            "BuyPrice": buy_price,
-            "BuyDate": buy_date
+            "Buyprice": buy_price,
+            "Buydate": buy_date
         }])
 
         try:
@@ -288,7 +344,7 @@ def add_to_portfolio(ticker, quantity, buy_price, buy_date=None):
             print(existing.head())
             print(existing.columns)
         except FileNotFoundError:
-            existing = pd.DataFrame(columns=["Ticker", "Quantity", "BuyPrice", "BuyDate"])
+            existing = pd.DataFrame(columns=["Ticker", "Quantity", "Buyprice", "Buydate"])
 
         updated = pd.concat([existing, new_entry], ignore_index=True)
         updated.to_csv(PORTFOLIO_FILE, index=False)

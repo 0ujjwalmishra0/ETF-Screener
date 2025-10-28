@@ -30,7 +30,9 @@ TICKERS= [
     'MASPTOP50.NS',
     'MODEFENCE.NS',
     'CPSEETF.NS',
-    'PSUBANK.NS'
+    'PSUBANK.NS',
+    'SBISILVER.NS',
+    'RISAINTL.BO'
 ]
 
 
