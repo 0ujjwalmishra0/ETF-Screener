@@ -2,7 +2,6 @@ import pandas as pd
 import numpy as np
 
 def compute_basic_indicators(df):
-    print("Computing basic indicators")
 
     # Ensure single-level columns
     if isinstance(df.columns, pd.MultiIndex):

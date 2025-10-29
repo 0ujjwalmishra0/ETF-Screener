@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ETF Portfolio Tracker</title>
+    <style>
+        body {
+            font-family: 'Inter', 'Segoe UI', Roboto, Arial, sans-serif;
+            background: #f3f6fb;
+            margin: 40px;
+            color: #333;
+        }
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.05);
+            padding: 35px 40px;
+            max-width: 1200px;
+            margin: auto;
+        }
+        h1 {
+            font-size: 30px;
+            color: #1f4ed8;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+        h1::before {
+            content: "📊";
+            font-size: 30px;
+        }
+        .last-updated {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 25px;
+            font-weight: 500;
+        }
+        .summary {
+            display: flex;
+            gap: 25px;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+            justify-content: space-between;
+        }
+        .summary-card {
+            flex: 1;
+            min-width: 100px;
+            background: #f9fbff;
+            border: 1px solid #dbe9ff;
+            border-radius: 14px;
+            padding: 18px 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.03);
+        }
+        .summary-card h3 {
+            margin: 0;
+            color: #1f77b4;
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .summary-card p {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+            color: #111;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-size: 14px;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        th {
+            background: #0056b3;
+            color: white;
+            padding: 10px;
+            text-align: center;
+            letter-spacing: 0.3px;
+            position: relative;
+            cursor: pointer;
+        }
+        th.sorted-asc::after {
+            content: "▲";
+            position: absolute;
+            right: 6px;
+            font-size: 10px;
+            color: #6ef37e;
+        }
+        th.sorted-desc::after {
+            content: "▼";
+            position: absolute;
+            right: 6px;
+            font-size: 10px;
+            color: #ff6464;
+        }
+        td {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+            background: #fff;
+        }
+        tr:hover td {
+            background: #f7faff;
+        }
+        .gain { color: #00a65a; font-weight: 600; }
+        .loss { color: #e74c3c; font-weight: 600; }
+
+        /* --- Signal badges --- */
+        .signal-buy {
+            background: #e8f6f0;
+            color: #00a65a;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 14px;
+            display: inline-block;
+        }
+        .signal-wait {
+            background: #fff4e0;
+            color: #e0a100;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 14px;
+            display: inline-block;
+        }
+        .signal-avoid {
+            background: #fdecea;
+            color: #e74c3c;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 14px;
+            display: inline-block;
+        }
+
+        /* --- Trend color styling --- */
+        td:has(.trend-up) {
+            color: #00a65a !important;
+            font-weight: 600;
+        }
+        td:has(.trend-down) {
+            color: #e74c3c !important;
+            font-weight: 600;
+        }
+
+        .tooltip-wrapper {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .tooltip-box {
+            visibility: hidden;
+            opacity: 0;
+            background: rgba(0, 0, 0, 0.92);
+            color: #fff;
+            padding: 10px 14px;
+            border-radius: 8px;
+            position: absolute;
+            bottom: 130%;
+            left: 50%;
+            transform: translateX(-50%) translateY(8px);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+            line-height: 1.5;
+            font-size: 13px;
+            text-align: left;
+            white-space: normal;
+            max-width: 320px;
+            width: max-content;
+            z-index: 9999;
+        }
+
+        .tooltip-box::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -6px;
+            border-width: 6px;
+            border-style: solid;
+            border-color: rgba(0,0,0,0.92) transparent transparent transparent;
+        }
+
+        .tooltip-wrapper:hover .tooltip-box {
+            visibility: visible;
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+
+        .trend-up {
+            color: #00a65a;
+            font-weight: 600;
+        }
+
+        .trend-down {
+            color: #e74c3c;
+            font-weight: 600;
+        }
+
+        .signal-buy, .signal-wait, .signal-avoid {
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .signal-buy:hover, .signal-wait:hover, .signal-avoid:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 6px rgba(0,0,0,0.15);
+        }
+
+
+
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 13px;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>ETF Portfolio Tracker</h1>
+    <div class="last-updated"><b>Last Updated:</b> 2025-10-30 01:32</div>
+
+    <div class="summary">
+        <div class="summary-card">
+            <h3>💰 Total Portfolio Value</h3>
+            <p>₹25,465.91</p>
+        </div>
+        <div class="summary-card">
+            <h3>📈 Total PnL%</h3>
+            <p style="color: #e74c3c;">-0.59%</p>
+        </div>
+        <div class="summary-card">
+            <h3>🟢 Accumulate / Hold</h3>
+            <p>12</p>
+        </div>
+        <div class="summary-card">
+            <h3>🔴 Exit / Cut Loss</h3>
+            <p>0</p>
+        </div>
+    </div>
+
+    <table class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Ticker</th>
+      <th>Qty</th>
+      <th>Buyprice</th>
+      <th>CurrentPrice</th>
+      <th>PnL%</th>
+      <th>Buydate</th>
+      <th>Signal</th>
+      <th>Confidence</th>
+      <th>Trend</th>
+      <th>Score</th>
+      <th>NextRange</th>
+      <th>SuggestedAction</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>NATIONALUM.NS</td>
+      <td>26</td>
+      <td>186.37</td>
+      <td>238.10</td>
+      <td><span style="color:#00a65a;font-weight:600;">+27.76%</span></td>
+      <td>02-07-2025</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-wait">WAIT</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>15%</td>
+      <td>📈 up</td>
+      <td>1.5</td>
+      <td><span class="tooltip-wrapper">₹233.81 - ₹242.39<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Book Profit</td>
+    </tr>
+    <tr>
+      <td>SBISILVER.NS</td>
+      <td>1</td>
+      <td>112.98</td>
+      <td>144.09</td>
+      <td><span style="color:#00a65a;font-weight:600;">+27.54%</span></td>
+      <td>18-08-2025</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-wait">WAIT</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>5%</td>
+      <td>📈 up</td>
+      <td>0.5</td>
+      <td><span class="tooltip-wrapper">₹141.50 - ₹146.68<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Book Profit</td>
+    </tr>
+    <tr>
+      <td>TATAMOTORS.NS</td>
+      <td>3</td>
+      <td>936.00</td>
+      <td>411.50</td>
+      <td><span style="color:#e74c3c;font-weight:600;">-56.04%</span></td>
+      <td>23-02-2024</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-avoid">STRONG WAIT</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>25%</td>
+      <td>📉 down</td>
+      <td>-2.5</td>
+      <td><span class="tooltip-wrapper">₹404.09 - ₹418.91<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Cut Loss</td>
+    </tr>
+    <tr>
+      <td>RISAINTL.BO</td>
+      <td>1801</td>
+      <td>0.75</td>
+      <td>0.76</td>
+      <td><span style="color:#00a65a;font-weight:600;">+1.33%</span></td>
+      <td>18-08-2025</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-buy">BUY</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>30%</td>
+      <td>➡️ side</td>
+      <td>3.0</td>
+      <td><span class="tooltip-wrapper">₹0.75 - ₹0.77<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Hold / Accumulate</td>
+    </tr>
+    <tr>
+      <td>HDFCNEXT50.NS</td>
+      <td>30</td>
+      <td>70.82</td>
+      <td>71.41</td>
+      <td><span style="color:#00a65a;font-weight:600;">+0.83%</span></td>
+      <td>29-09-2025</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-avoid">STRONG BUY</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>70%</td>
+      <td>📈 up</td>
+      <td>7.0</td>
+      <td><span class="tooltip-wrapper">₹70.12 - ₹72.70<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Hold / Accumulate</td>
+    </tr>
+    <tr>
+      <td>SETFNN50.NS</td>
+      <td>1</td>
+      <td>741.35</td>
+      <td>746.73</td>
+      <td><span style="color:#00a65a;font-weight:600;">+0.73%</span></td>
+      <td>27-09-2025</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-avoid">STRONG BUY</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>70%</td>
+      <td>📈 up</td>
+      <td>7.0</td>
+      <td><span class="tooltip-wrapper">₹733.29 - ₹760.17<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Hold / Accumulate</td>
+    </tr>
+    <tr>
+      <td>MIDCAPETF.NS</td>
+      <td>10</td>
+      <td>22.42</td>
+      <td>22.57</td>
+      <td><span style="color:#00a65a;font-weight:600;">+0.67%</span></td>
+      <td>27-09-2025</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-buy">BUY</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>45%</td>
+      <td>📈 up</td>
+      <td>4.5</td>
+      <td><span class="tooltip-wrapper">₹22.16 - ₹22.98<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Hold / Accumulate</td>
+    </tr>
+    <tr>
+      <td>NEXT50IETF.NS</td>
+      <td>15</td>
+      <td>73.25</td>
+      <td>73.73</td>
+      <td><span style="color:#00a65a;font-weight:600;">+0.66%</span></td>
+      <td>29-09-2025</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-buy">BUY</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>55%</td>
+      <td>📈 up</td>
+      <td>5.5</td>
+      <td><span class="tooltip-wrapper">₹72.40 - ₹75.06<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Hold / Accumulate</td>
+    </tr>
+    <tr>
+      <td>ABSLNN50ET.NS</td>
+      <td>11</td>
+      <td>72.96</td>
+      <td>73.23</td>
+      <td><span style="color:#00a65a;font-weight:600;">+0.37%</span></td>
+      <td>29-09-2025</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-buy">BUY</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>50%</td>
+      <td>📈 up</td>
+      <td>5.0</td>
+      <td><span class="tooltip-wrapper">₹71.91 - ₹74.55<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Hold / Accumulate</td>
+    </tr>
+    <tr>
+      <td>CPSEETF.NS</td>
+      <td>15</td>
+      <td>94.55</td>
+      <td>94.77</td>
+      <td><span style="color:#00a65a;font-weight:600;">+0.23%</span></td>
+      <td>29-09-2025</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-avoid">STRONG BUY</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>85%</td>
+      <td>📈 up</td>
+      <td>8.5</td>
+      <td><span class="tooltip-wrapper">₹93.06 - ₹96.48<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Hold / Accumulate</td>
+    </tr>
+    <tr>
+      <td>MAM150ETF.NS</td>
+      <td>10</td>
+      <td>22.42</td>
+      <td>22.46</td>
+      <td><span style="color:#00a65a;font-weight:600;">+0.18%</span></td>
+      <td>29-09-2025</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-buy">BUY</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>45%</td>
+      <td>📈 up</td>
+      <td>4.5</td>
+      <td><span class="tooltip-wrapper">₹22.06 - ₹22.86<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Hold / Accumulate</td>
+    </tr>
+    <tr>
+      <td>ABSLPSE.NS</td>
+      <td>955</td>
+      <td>10.33</td>
+      <td>10.32</td>
+      <td><span style="color:#e74c3c;font-weight:600;">-0.10%</span></td>
+      <td>29-09-2025</td>
+      <td>\n            <div class="tooltip-wrapper">\n                <span class="signal-avoid">STRONG BUY</span>\n                <div class="tooltip-box">(No advice provided)</div>\n            </div>\n</td>
+      <td>85%</td>
+      <td>📈 up</td>
+      <td>8.5</td>
+      <td><span class="tooltip-wrapper">₹10.13 - ₹10.51<span class="tooltip-box">Expected next price zone</span></span></td>
+      <td>Hold / Accumulate</td>
+    </tr>
+  </tbody>
+</table>
+
+    <div class="footer">© 2025 ETF Screener Pro — Powered by yFinance</div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const table = document.querySelector("table.table");
+        const headers = table.querySelectorAll("th");
+        let sortOrder = {};
+
+        headers.forEach((header, index) => {
+            header.addEventListener("click", () => {
+                const rows = Array.from(table.querySelectorAll("tbody tr"));
+                const direction = sortOrder[index] === "asc" ? "desc" : "asc";
+                sortOrder[index] = direction;
+
+                rows.sort((a, b) => {
+                    const getValue = (row, i) => {
+                        let text = row.children[i].innerText.trim().replace(/[₹,%]/g, "");
+                        return isNaN(parseFloat(text)) ? text : parseFloat(text);
+                    };
+                    const aVal = getValue(a, index);
+                    const bVal = getValue(b, index);
+                    if (aVal < bVal) return direction === "asc" ? -1 : 1;
+                    if (aVal > bVal) return direction === "asc" ? 1 : -1;
+                    return 0;
+                });
+
+                const tbody = table.querySelector("tbody");
+                tbody.innerHTML = "";
+                rows.forEach(r => tbody.appendChild(r));
+
+                headers.forEach(h => h.classList.remove("sorted-asc", "sorted-desc"));
+                header.classList.add(direction === "asc" ? "sorted-asc" : "sorted-desc");
+            });
+        });
+    });
+</script>
+
+</body>
+</html>

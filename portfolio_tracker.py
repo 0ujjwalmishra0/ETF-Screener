@@ -5,6 +5,7 @@ from data_fetch import fetch_etf_data
 from indicators import compute_basic_indicators
 from strategies.simple_rule_strategy import SimpleRuleStrategy
 from strategies.weighted_strategy import WeightedStrategy
+from strategies.smart_hybrid_strategy import SmartHybridStrategy
 from advisor import AdvisorEngine
 from datetime import datetime
 import os
@@ -14,8 +15,8 @@ OUTPUT_DIR = "dashboards"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 class PortfolioTracker:
-    def __init__(self, strategy="weighted"):
-        self.strategy = WeightedStrategy() if strategy.lower() == "weighted" else SimpleRuleStrategy()
+    def __init__(self, strategy):
+        self.strategy = strategy
         self.data = {}  # store {ticker: processed dataframe} for reuse
 
     def load_portfolio(self):
@@ -82,6 +83,7 @@ class PortfolioTracker:
             try:
                 # --- Evaluate Strategy ---
                 signal, confidence, trend, score = self.strategy.evaluate(df)
+                # signal, confidence, trend, score, breakdown, model_prob = self.strategy.evaluate(df)
                 last_close = float(df.iloc[-1]["Close"])
                 pnl = ((last_close - buy_price) / buy_price) * 100
 
@@ -96,6 +98,7 @@ class PortfolioTracker:
                     pnl=pnl,
                     score=score
                 )
+                print(advice)
 
                 # --- Collect results ---
                 results.append({
@@ -174,6 +177,39 @@ class PortfolioTracker:
                 return '<span class="signal-avoid" title="Weak fundamentals or negative trend. Consider exiting.">SELL</span>'
             return f'<span>{v}</span>'
 
+        def format_signal_with_tooltip(row):
+            signal = str(row.get("Signal", "")).upper()
+            advice_raw = str(row.get("Advice", "") or "")
+
+            # Clean up escaped newlines
+            advice_clean = (
+                advice_raw.replace("\\n", "\n")
+                .replace("\r", "")
+                .strip()
+            )
+
+            # Fallback text
+            if not advice_clean:
+                advice_clean = "(No advice provided)"
+
+            # Convert newlines to HTML <br> for multiline tooltip
+            advice_html = "<br>".join(line.strip() for line in advice_clean.split("\n") if line.strip())
+
+            cls = (
+                "signal-buy" if signal == "BUY"
+                else "signal-wait" if signal == "WAIT"
+                else "signal-avoid"
+            )
+
+            return f"""
+            <div class="tooltip-wrapper">
+                <span class="{cls}">{signal}</span>
+                <div class="tooltip-box">{advice_html}</div>
+            </div>
+            """
+
+            return tooltip_html
+
         def format_pnl(val):
             try:
                 val = float(val)
@@ -198,7 +234,7 @@ class PortfolioTracker:
 
     # Apply formatting
         if "Signal" in df.columns:
-            df["Signal"] = df["Signal"].apply(format_signal)
+            df["Signal"] = df.apply(format_signal_with_tooltip, axis=1)
         if "PnL%" in df.columns:
             df["PnL%"] = df["PnL%"].apply(format_pnl)
         if "NextRange" in df.columns:
@@ -218,7 +254,7 @@ class PortfolioTracker:
         last_updated = datetime.now().strftime("%Y-%m-%d %H:%M")
 
         # Generate HTML table
-        table_html = df.to_html(index=False, escape=False, classes="table", border=0)
+        table_html = df.to_html(index=False, escape=False, border=0)
 
         # Load template
         with open("dashboards/portfolio_dashboard_template.html") as f:
@@ -246,7 +282,7 @@ class PortfolioTracker:
 
 
 def run_portfolio_tracker():
-    tracker = PortfolioTracker(strategy="weighted")
+    tracker = PortfolioTracker(strategy=WeightedStrategy())
     portfolio_df = tracker.evaluate_positions()
     html_file = tracker.generate_dashboard(portfolio_df)
     return html_file
@@ -256,7 +292,7 @@ def add_to_portfolio(ticker, quantity, buy_price, buy_date=None):
     """Append a new ETF holding to the portfolio CSV."""
     try:
         if buy_date is None:
-            buy_date = datetime.now().strftime("%Y-%m-%d")
+            buy_date = datetime.now().strftime("%dd-%mm-%YYYY")
 
         new_entry = pd.DataFrame([{
             "Ticker": ticker,
