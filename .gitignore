@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.tmp
+*.DS_Store
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE configs
+.vscode/
+.idea/
+
+# Data & cache folders
+__cache__/
+cache/
+
+# Output folders
+charts/
+sparkline/
+output/
+reports/
+
+# Ignore image files
+*.png
+*.jpg
+*.jpeg
+*.svg
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
