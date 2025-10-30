@@ -381,11 +381,11 @@ class AdvisorEngine:
         # Final advice message
         reason_text = ", ".join(reasons) if reasons else self.get_reason(signal, trend, pnl)
         advice = (
-            f"Signal: {signal} (Confidence {confidence}%)\n"
+            # f"Signal: {signal} (Confidence {confidence}%)\n"
             f"Reason: {reason_text}.\n"
             f"Action: {action}\n"
-            f"Next 7D Range: ₹{round(next_range[0],2)} – ₹{round(next_range[1],2)}\n"
-            f"Portfolio Impact: {impact:+.2f}% expected if trend continues."
+            # f"Next 7D Range: ₹{round(next_range[0],2)} – ₹{round(next_range[1],2)}\n"
+            # f"Portfolio Impact: {impact:+.2f}% expected if trend continues."
         )
 
         return {

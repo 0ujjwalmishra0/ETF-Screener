@@ -9,6 +9,7 @@ from strategies.smart_hybrid_strategy import SmartHybridStrategy
 from advisor import AdvisorEngine
 from datetime import datetime
 import os
+import html,re
 
 PORTFOLIO_FILE = "portfolio.csv"
 OUTPUT_DIR = "dashboards"
@@ -98,7 +99,6 @@ class PortfolioTracker:
                     pnl=pnl,
                     score=score
                 )
-                print(advice)
 
                 # --- Collect results ---
                 results.append({
@@ -115,7 +115,8 @@ class PortfolioTracker:
                     "Reason": advice["Reason"],
                     "Action": advice["Action"],
                     "NextRange": advice["NextRange"],
-                    "PortfolioImpact": advice["PortfolioImpact"]
+                    "PortfolioImpact": advice["PortfolioImpact"],
+                    "Advice": advice.get("Advice", "")
                 })
 
             except Exception as e:
@@ -162,53 +163,25 @@ class PortfolioTracker:
         df = pd.DataFrame(results)
 
         # Drop unwanted columns
-        for col in ["Reason", "Action", "PortfolioImpact"]:
+        for col in ["Reason", "Advice","Action", "PortfolioImpact"]:
             if col in df.columns:
                 df.drop(columns=[col], inplace=True)
 
-        # Format helpers
-        def format_signal(val):
-            v = str(val).upper()
-            if v == "BUY":
-                return '<span class="signal-buy" title="Positive technical and sentiment indicators. Consider gradual accumulation.">BUY</span>'
-            elif v == "WAIT":
-                return '<span class="signal-wait" title="Neutral signal. Hold and monitor breakout range.">WAIT</span>'
-            elif v == "SELL":
-                return '<span class="signal-avoid" title="Weak fundamentals or negative trend. Consider exiting.">SELL</span>'
-            return f'<span>{v}</span>'
-
         def format_signal_with_tooltip(row):
-            signal = str(row.get("Signal", "")).upper()
+            signal = str(row.get("Signal", "")).upper().strip()
             advice_raw = str(row.get("Advice", "") or "")
 
-            # Clean up escaped newlines
-            advice_clean = (
-                advice_raw.replace("\\n", "\n")
-                .replace("\r", "")
-                .strip()
-            )
-
-            # Fallback text
-            if not advice_clean:
-                advice_clean = "(No advice provided)"
-
-            # Convert newlines to HTML <br> for multiline tooltip
-            advice_html = "<br>".join(line.strip() for line in advice_clean.split("\n") if line.strip())
+            # Clean and normalize
+            advice_clean = html.unescape(advice_raw).strip()
 
             cls = (
-                "signal-buy" if signal == "BUY"
-                else "signal-wait" if signal == "WAIT"
+                "signal-buy" if signal in ["BUY", "STRONG BUY"]
+                else "signal-wait" if signal in ["WAIT", "STRONG WAIT"]
                 else "signal-avoid"
             )
 
-            return f"""
-            <div class="tooltip-wrapper">
-                <span class="{cls}">{signal}</span>
-                <div class="tooltip-box">{advice_html}</div>
-            </div>
-            """
+            return f"""<div class="tooltip-wrapper"><div class="{cls}">{signal}</span><div class="tooltip-box">{advice_clean}</div></div>"""
 
-            return tooltip_html
 
         def format_pnl(val):
             try:
@@ -223,6 +196,7 @@ class PortfolioTracker:
             if isinstance(val, (list, tuple)) and len(val) == 2:
                 return f'<span class="tooltip-wrapper">₹{val[0]:.2f} - ₹{val[1]:.2f}<span class="tooltip-box">Expected next price zone</span></span>'
             return str(val) if val else "-"
+
         def format_trend(val):
             v = str(val).strip().lower()
             if v == "up":
@@ -231,8 +205,7 @@ class PortfolioTracker:
                 return '<span class="trend-down">Down</span>'
             return v
 
-
-    # Apply formatting
+        # Apply formatting
         if "Signal" in df.columns:
             df["Signal"] = df.apply(format_signal_with_tooltip, axis=1)
         if "PnL%" in df.columns:
@@ -242,8 +215,7 @@ class PortfolioTracker:
         if "Trend" in df.columns:
             df["Trend"] = df["Trend"].apply(format_trend)
 
-
-    # Compute summary
+        # Compute summary
         total_value = sum(df["CurrentPrice"].astype(float) * df["Qty"].astype(float))
         total_invested = sum(df["Buyprice"].astype(float) * df["Qty"].astype(float))
         total_pnl = ((total_value - total_invested) / total_invested) * 100

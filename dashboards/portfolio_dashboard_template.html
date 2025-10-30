@@ -140,11 +140,11 @@
 
         /* --- Trend color styling --- */
         td:has(.trend-up) {
-            color: #00a65a !important;
+            color: #00a65a;
             font-weight: 600;
         }
         td:has(.trend-down) {
-            color: #e74c3c !important;
+            color: #e74c3c;
             font-weight: 600;
         }
 
@@ -254,38 +254,84 @@
 
 <script>
     document.addEventListener("DOMContentLoaded", function () {
-        const table = document.querySelector("table.table");
-        const headers = table.querySelectorAll("th");
-        let sortOrder = {};
+        // Try to find the main table. If you prefer a specific class, put it here (e.g. "table" or "dataframe")
+        const table = document.querySelector("table") || document.querySelector("table.table") || document.querySelector("table.dataframe");
+        if (!table) return; // nothing to sort
 
+        const headers = table.querySelectorAll("thead th, th"); // covers both thead and plain th
+        if (!headers || headers.length === 0) return;
+
+        const tbody = table.querySelector("tbody") || table;
+
+        // helper: extract numeric value if possible, else return trimmed string
+        function parseCellValue(cell) {
+            if (!cell) return "";
+            // prefer textContent / innerText
+            let text = (cell.textContent || cell.innerText || "").trim();
+
+            // remove currency symbols, percent signs, and non-number punctuation (keep dot and minus)
+            // also replace non-breaking spaces and en-dash with normal chars
+            text = text.replace(/\u00A0/g, " ").replace(/\u2013/g, "-").replace(/\u2014/g, "-");
+
+            // remove rupee, comma, percent, and other common noise
+            const cleaned = text.replace(/[₹,₹\s%]/g, "");
+
+            // if cleaned looks like a number, parse it
+            const num = parseFloat(cleaned);
+            if (!isNaN(num) && cleaned !== "") return { type: "number", value: num };
+
+            // otherwise return lowercase string for consistent comparison
+            return { type: "string", value: text.toLowerCase() };
+        }
+
+        // attach click handler to each header
+        let sortState = {}; // keep sort direction per column index
         headers.forEach((header, index) => {
+            header.style.cursor = "pointer";
             header.addEventListener("click", () => {
-                const rows = Array.from(table.querySelectorAll("tbody tr"));
-                const direction = sortOrder[index] === "asc" ? "desc" : "asc";
-                sortOrder[index] = direction;
+                const rows = Array.from(tbody.querySelectorAll("tr"));
+                const direction = sortState[index] === "asc" ? "desc" : "asc";
+                sortState[index] = direction;
 
                 rows.sort((a, b) => {
-                    const getValue = (row, i) => {
-                        let text = row.children[i].innerText.trim().replace(/[₹,%]/g, "");
-                        return isNaN(parseFloat(text)) ? text : parseFloat(text);
-                    };
-                    const aVal = getValue(a, index);
-                    const bVal = getValue(b, index);
-                    if (aVal < bVal) return direction === "asc" ? -1 : 1;
-                    if (aVal > bVal) return direction === "asc" ? 1 : -1;
-                    return 0;
+                    const aCell = a.children[index];
+                    const bCell = b.children[index];
+
+                    const aParsed = parseCellValue(aCell);
+                    const bParsed = parseCellValue(bCell);
+
+                    // If both numbers, compare numerically
+                    if (aParsed.type === "number" && bParsed.type === "number") {
+                        return direction === "asc" ? aParsed.value - bParsed.value : bParsed.value - aParsed.value;
+                    }
+
+                    // If one is number and other string, numbers first
+                    if (aParsed.type === "number" && bParsed.type === "string") {
+                        return direction === "asc" ? -1 : 1;
+                    }
+                    if (aParsed.type === "string" && bParsed.type === "number") {
+                        return direction === "asc" ? 1 : -1;
+                    }
+
+                    // both strings -> locale compare
+                    const cmp = aParsed.value.localeCompare(bParsed.value, undefined, { numeric: true, sensitivity: "base" });
+                    return direction === "asc" ? cmp : -cmp;
                 });
 
-                const tbody = table.querySelector("tbody");
-                tbody.innerHTML = "";
-                rows.forEach(r => tbody.appendChild(r));
+                // remove existing rows and re-append in sorted order
+                const parent = tbody.tagName.toLowerCase() === "tbody" ? tbody : table.querySelector("tbody");
+                if (!parent) return;
+                parent.innerHTML = "";
+                rows.forEach(r => parent.appendChild(r));
 
+                // update header classes
                 headers.forEach(h => h.classList.remove("sorted-asc", "sorted-desc"));
                 header.classList.add(direction === "asc" ? "sorted-asc" : "sorted-desc");
             });
         });
     });
 </script>
+
 
 </body>
 </html>
