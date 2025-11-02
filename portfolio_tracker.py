@@ -8,6 +8,8 @@ from strategies.weighted_strategy import WeightedStrategy
 from strategies.smart_hybrid_strategy import SmartHybridStrategy
 from advisor import AdvisorEngine
 from datetime import datetime
+from utils.notify import send_push_notification, send_mac_notification
+import pandas as pd
 import os
 import html,re
 
@@ -83,7 +85,9 @@ class PortfolioTracker:
 
             try:
                 # --- Evaluate Strategy ---
+                #for weighted
                 signal, confidence, trend, score = self.strategy.evaluate(df)
+                # for ml
                 # signal, confidence, trend, score, breakdown, model_prob = self.strategy.evaluate(df)
                 last_close = float(df.iloc[-1]["Close"])
                 pnl = ((last_close - buy_price) / buy_price) * 100
@@ -252,10 +256,33 @@ class PortfolioTracker:
         return output_path
 
 
+    def check_for_new_strong_buys(self,df):
+        strong_buy_file = "data/strong_buy_cache.csv"
+        os.makedirs("data", exist_ok=True)
+
+        new_buys = df[df["Signal"].str.contains("STRONG BUY", case=False, na=False)]
+        if os.path.exists(strong_buy_file):
+            old_buys = pd.read_csv(strong_buy_file)
+            old_tickers = set(old_buys["Ticker"].tolist())
+        else:
+            old_tickers = set()
+
+        new_tickers = set(new_buys["Ticker"].tolist())
+        diff = new_tickers - old_tickers
+
+        if diff:
+            message = f"{', '.join(diff)}"
+            send_mac_notification("🔥New STRONG BUYs detected", message)
+
+        new_buys.to_csv(strong_buy_file, index=False)
+
+
+
 
 def run_portfolio_tracker():
     tracker = PortfolioTracker(strategy=WeightedStrategy())
     portfolio_df = tracker.evaluate_positions()
+    tracker.check_for_new_strong_buys(portfolio_df)
     html_file = tracker.generate_dashboard(portfolio_df)
     return html_file
 

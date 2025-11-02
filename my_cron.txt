@@ -1,1 +1,2 @@
 0 10 * * 0 /Users/ujjwal/Documents/Investment/etf_screener/venv/bin/python /Users/ujjwal/Documents/Investment/etf_screener/train_model.py >> /Users/ujjwal/Documents/Investment/etf_screener/logs/train_model.log 2>&1
+*/15 9-15 * * 1-5 /usr/bin/python3 /Users/ujjwal/Documents/Investment/etf_screener/main.py >> /Users/ujjwal/Documents/Investment/etf_screener/logs/cron.log 2>&1

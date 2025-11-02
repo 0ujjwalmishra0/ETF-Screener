@@ -1,0 +1,16 @@
+Ticker,Qty,Buyprice,CurrentPrice,PnL%,Buydate,Signal,Confidence,Trend,Score,Reason,Action,NextRange,PortfolioImpact,Advice,SuggestedAction
+NEXT50IETF.NS,15,73.25,73.41,0.22,29-09-2025,STRONG BUY,70%,📈 Up,7.0,Price near mean — sideways consolidation likely.,Hold position and monitor breakout levels.,"(72.09, 74.73)",0.0,"Reason: Price near mean — sideways consolidation likely..
+Action: Hold position and monitor breakout levels.
+",Hold / Accumulate
+MIDCAPETF.NS,10,22.42,22.45,0.13,27-09-2025,STRONG BUY,60%,📈 Up,6.0,Price near mean — sideways consolidation likely.,Hold position and monitor breakout levels.,"(22.05, 22.85)",0.0,"Reason: Price near mean — sideways consolidation likely..
+Action: Hold position and monitor breakout levels.
+",Hold / Accumulate
+MAM150ETF.NS,10,22.42,22.45,0.13,29-09-2025,STRONG BUY,60%,📈 Up,6.0,Price near mean — sideways consolidation likely.,Hold position and monitor breakout levels.,"(22.05, 22.85)",0.0,"Reason: Price near mean — sideways consolidation likely..
+Action: Hold position and monitor breakout levels.
+",Hold / Accumulate
+CPSEETF.NS,15,94.55,94.65,0.11,29-09-2025,STRONG BUY,70%,📈 Up,7.0,Price near mean — sideways consolidation likely.,Hold position and monitor breakout levels.,"(92.95, 96.35)",0.0,"Reason: Price near mean — sideways consolidation likely..
+Action: Hold position and monitor breakout levels.
+",Hold / Accumulate
+ABSLPSE.NS,955,10.33,10.31,-0.19,29-09-2025,STRONG BUY,70%,📈 Up,7.0,Price near mean — sideways consolidation likely.,Hold position and monitor breakout levels.,"(10.12, 10.5)",-0.0,"Reason: Price near mean — sideways consolidation likely..
+Action: Hold position and monitor breakout levels.
+",Hold / Accumulate
